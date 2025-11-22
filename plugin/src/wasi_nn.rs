@@ -5,6 +5,7 @@ use wasmedge_plugin_sdk::types::WasmVal;
 use std::mem;
 use std::sync::Mutex;
 use burn::backend::{NdArray, Wgpu};
+use burn::backend::ndarray::NdArrayDevice;
 use burn::backend::wgpu::WgpuDevice;
 use burn::prelude::{Backend, DeviceOps};
 use crate::{ErrNo, WasiTensorData};
@@ -88,19 +89,21 @@ impl WasiNN {
         // if target is gpu, only wgpu for now as backend
         if(*target == 1) {
 
-            let device = WgpuDevice::IntegratedGpu(1);
-            println!("Selected device: {:?}", device);
+            let device = WgpuDevice::DefaultDevice;
+
+            // 0:discrete, 1:integrated, 2:virtual, 3:cpu, 4:default
+            println!("Selected device: {:?}", WgpuDevice::IntegratedGpu(0).to_id());
 
             let graph = Graph::Squeezenet(SqueezenetModel::<WgpuBackend>::new(&device));
             self.graphs.lock().unwrap().insert(id, GraphWithBackend::WithWgpu(graph));
         }
 
         else if(*target == 0) {
-            let device = WgpuDevice::Cpu;
+            let device = NdArrayDevice::default();
             println!("Selected device: {:?}", device);
 
-            let graph = Graph::Squeezenet(SqueezenetModel::<WgpuBackend>::new(&device));
-            self.graphs.lock().unwrap().insert(id, GraphWithBackend::WithWgpu(graph));
+            let graph = Graph::Squeezenet(SqueezenetModel::<NdArrayBackend>::new(&device));
+            self.graphs.lock().unwrap().insert(id, GraphWithBackend::WithNdArray(graph));
 
         }
 
