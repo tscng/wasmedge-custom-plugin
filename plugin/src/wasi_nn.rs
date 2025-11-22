@@ -95,6 +95,15 @@ impl WasiNN {
             self.graphs.lock().unwrap().insert(id, GraphWithBackend::WithWgpu(graph));
         }
 
+        else if(*target == 0) {
+            let device = WgpuDevice::Cpu;
+            println!("Selected device: {:?}", device);
+
+            let graph = Graph::Squeezenet(SqueezenetModel::<WgpuBackend>::new(&device));
+            self.graphs.lock().unwrap().insert(id, GraphWithBackend::WithWgpu(graph));
+
+        }
+
         // unsupported target
         else {
             return Ok(vec![WasmVal::I32(ErrNo::InvalidArgument as i32)]);

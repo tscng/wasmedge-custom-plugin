@@ -55,11 +55,6 @@ impl<B: Backend> SqueezenetContext<B> {
         println!("B is: {}", std::any::type_name::<B>());
         println!("Selected device: {:?}", device.to_id());
 
-        //let device2: WgpuDevice = WgpuDevice::DiscreteGpu(0);
-        //println!("total {:?}",WgpuDevice::device_count_total());
-        //let tensor = Tensor::<Wgpu, 1>::from_data(&*input, &device2).reshape(dimens);
-        //println!("Selected device: {:?}", device2.to_id());
-
         let tensor = Tensor::<B, 1>::from_data(&*input, &device).reshape(dimens);
         self.inputs.insert(key, tensor);
     }
