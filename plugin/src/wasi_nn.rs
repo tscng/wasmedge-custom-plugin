@@ -88,11 +88,10 @@ impl WasiNN {
 
         // if target is gpu, only wgpu for now as backend
         if(*target == 1) {
-
             let device = WgpuDevice::DefaultDevice;
 
             // 0:discrete, 1:integrated, 2:virtual, 3:cpu, 4:default
-            println!("Selected device: {:?}", WgpuDevice::IntegratedGpu(0).to_id());
+            println!("Selected device: {:?}, {:?}", device, device.to_id());
 
             let graph = Graph::Squeezenet(SqueezenetModel::<WgpuBackend>::new(&device));
             self.graphs.lock().unwrap().insert(id, GraphWithBackend::WithWgpu(graph));
@@ -100,11 +99,10 @@ impl WasiNN {
 
         else if(*target == 0) {
             let device = NdArrayDevice::default();
-            println!("Selected device: {:?}", device);
+            println!("Selected device: {:?}, {:?}", device, device.to_id());
 
             let graph = Graph::Squeezenet(SqueezenetModel::<NdArrayBackend>::new(&device));
             self.graphs.lock().unwrap().insert(id, GraphWithBackend::WithNdArray(graph));
-
         }
 
         // unsupported target
@@ -253,7 +251,7 @@ impl WasiNN {
                         match (context, graph) {
                             (Context::Squeezenet(squeezenet_context), GraphWithBackend::WithNdArray(Graph::Squeezenet(squeezenet_model))) => {
                                 // get input tensor
-                                let input_tensor = squeezenet_context.inputs.get(&0).unwrap();
+                                let input_tensor = squeezenet_context.inputs.get(&1).unwrap();
                                 // compute
                                 let output_tensor = squeezenet_model.compute(input_tensor.clone());
                                 // store output
