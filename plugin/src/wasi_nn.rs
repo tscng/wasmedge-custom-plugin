@@ -71,10 +71,10 @@ impl WasiNN {
         // print for debugging
         let name = String::from_utf8_lossy(&bytes);
         println!("Test bytes: {}", name);
-        println!("Test graph data_ptr: {:?}", data_ptr);
-        println!("Test graph data_len: {:?}", data_len);
-        println!("Test graph encoding: {:?}", encoding);
-        println!("Test graph target: {:?}", target);
+        println!("Test graph data_ptr: {:?}", *data_ptr);
+        println!("Test graph data_len: {:?}", *data_len);
+        println!("Test graph encoding: {:?}", *encoding);
+        println!("Test graph target: {:?}", *target);
 
         // must be burn encoding
         if(*encoding != 8){

@@ -13,14 +13,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // example: https://docs.rs/wasmedge-wasi-nn/0.8.0/wasmedge_wasi_nn/
 
     // pass a short demo array as bytes
-    let graph = GraphBuilder::new(GraphEncoding::Burn, ExecutionTarget::CPU).build_from_bytes([&model_bytes, &model_bytes])?;
+    let graph = GraphBuilder::new(GraphEncoding::Burn, ExecutionTarget::GPU).build_from_bytes([&model_bytes, &model_bytes])?;
     let mut ctx = graph.init_execution_context()?;
     ctx.set_input(1, TensorType::F32, &input_dim, &input)?;
 
     // Do the inference.
     ctx.compute()?;
 
-    // Copy output to abuffer.
+    // Copy output to a buffer.
     let output_bytes = ctx.get_output(1, &mut output_buffer)?;
     println!("output_bytes: {:?}", output_bytes);
     assert_eq!(output_bytes, output_buffer.len() * std::mem::size_of::<f32>());
