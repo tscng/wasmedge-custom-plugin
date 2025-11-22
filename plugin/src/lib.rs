@@ -1,7 +1,12 @@
+#![recursion_limit = "256"]
 mod backends;
 mod wasi_nn;
 mod helper;
+mod squeezenet;
+mod whisper;
 
+use std::sync::Mutex;
+use once_cell::sync::Lazy;
 use wasmedge_plugin_sdk::{
     error::CoreError,
     memory::Memory,
@@ -14,6 +19,7 @@ use wasmedge_plugin_sdk::types::ValType;
 
 use wasmedge_wasi_nn::TensorType;
 use crate::backends::get_backends;
+use crate::wasi_nn::WasiNN;
 
 pub enum ErrNo {
     Success = 0,              // No error occurred.
@@ -26,7 +32,6 @@ pub enum ErrNo {
     TooLarge = 7,             // Too Large.
     NotFound = 8,             // Not Found.
 }
-
 
 #[derive(Debug)]
 #[repr(C)]
@@ -43,25 +48,29 @@ pub fn create_module() -> PluginModule<()> {
     // debug backends
     futures::executor::block_on(get_backends());
 
+    pub static WASI_NN: Lazy<Mutex<WasiNN>> = Lazy::new(|| {
+        Mutex::new(WasiNN::new())
+    });
+
     // define functions that will be accessible to call via the interface
-    fn load<'a>(
-        _inst_ref: &'a mut SyncInstanceRef,
-        memory: &'a mut Memory,
-        _data: &'a mut (),
-        args: Vec<WasmVal>,
-    ) -> Result<Vec<WasmVal>, CoreError> {
+    let load = |
+        _inst_ref: &mut SyncInstanceRef,
+        memory: &mut Memory,
+        _data: &mut (),
+        args: Vec<WasmVal>
+    | -> Result<Vec<WasmVal>, CoreError> {
         if let [WasmVal::I32(data_ptr),
-                WasmVal::I32(data_len),
-                WasmVal::I32(encoding),
-                WasmVal::I32(target),
-                WasmVal::I32(graph_handle_ptr)] = &args[..]
+        WasmVal::I32(data_len),
+        WasmVal::I32(encoding),
+        WasmVal::I32(target),
+        WasmVal::I32(graph_handle_ptr)] = &args[..]
         {
-            wasi_nn::load(data_ptr, data_len, encoding, target, graph_handle_ptr, memory)
-        }
-        else {
+            let mut wasi_nn = WASI_NN.lock().unwrap();
+            wasi_nn.load(data_ptr, data_len, encoding, target, graph_handle_ptr, memory)
+        } else {
             Ok(vec![WasmVal::I32(ErrNo::InvalidArgument as i32)])
         }
-    }
+    };
 
     fn load_by_name<'a>(
         _inst_ref: &'a mut SyncInstanceRef,
@@ -89,7 +98,8 @@ pub fn create_module() -> PluginModule<()> {
     ) -> Result<Vec<WasmVal>, CoreError> {
         if let [WasmVal::I32(graph_handle), WasmVal::I32(ctx_handle_ptr)] = &args[..]
         {
-            wasi_nn::init_execution_context(graph_handle, ctx_handle_ptr, memory)
+            let mut wasi_nn = WASI_NN.lock().unwrap();
+            wasi_nn.init_execution_context(graph_handle, ctx_handle_ptr, memory)
         }
         else {
             Ok(vec![WasmVal::I32(ErrNo::InvalidArgument as i32)])
@@ -106,7 +116,8 @@ pub fn create_module() -> PluginModule<()> {
                 WasmVal::I32(input_index),
                 WasmVal::I32(tensor_ptr)] = &args[..]
         {
-            wasi_nn::set_input(ctx_handle, input_index, tensor_ptr, memory)
+            let mut wasi_nn = WASI_NN.lock().unwrap();
+            wasi_nn.set_input(ctx_handle, input_index, tensor_ptr, memory)
         }
         else {
             Ok(vec![WasmVal::I32(ErrNo::InvalidArgument as i32)])
@@ -125,7 +136,8 @@ pub fn create_module() -> PluginModule<()> {
                 WasmVal::I32(output_max_size),
                 WasmVal::I32(output_written_len_ptr)] = &args[..]
         {
-            wasi_nn::get_output(ctx_handle, output_index, output_ptr, output_max_size, output_written_len_ptr, memory)
+            let mut wasi_nn = WASI_NN.lock().unwrap();
+            wasi_nn.get_output(ctx_handle, output_index, output_ptr, output_max_size, output_written_len_ptr, memory)
         }
         else {
             Ok(vec![WasmVal::I32(ErrNo::InvalidArgument as i32)])
@@ -149,7 +161,8 @@ pub fn create_module() -> PluginModule<()> {
     ) -> Result<Vec<WasmVal>, CoreError> {
         if let [WasmVal::I32(ctx_handle)] = &args[..]
         {
-            wasi_nn::compute(ctx_handle)
+            let mut wasi_nn = WASI_NN.lock().unwrap();
+            wasi_nn.compute(ctx_handle)
         }
         else {
             Ok(vec![WasmVal::I32(ErrNo::InvalidArgument as i32)])
