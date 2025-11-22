@@ -59,8 +59,10 @@ pub async fn get_backends() {
     );
 
     // CUDA (NVIDIA GPUs)
-    println!(
-        " - CUDA -> compiled: yes, devices: {}",
-        backend_has_devices::<burn_cuda::Cuda<f32, i32>>()
-    );
+    //println!(
+    //    " - CUDA -> compiled: yes, devices: {}",
+    //    backend_has_devices::<burn_cuda::Cuda<f32, i32>>()
+    //);
+
+    println!("\n=====\n");
 }
