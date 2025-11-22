@@ -3,11 +3,21 @@ name = "wasmedge-custom-plugin"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = [
+    "std",
+    "cubecl-runtime/default",
+    "cubecl-common/default",
+    "cubecl-core/default",
+    "cudarc/cuda-12090",
+    "cudarc/dynamic-loading",
+]
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
+
 wasmedge_plugin_sdk = { git = "https://github.com/second-state/wasmedge_plugin_rust_sdk.git", features = ["standalone"] }
 burn = { version = "0.19.1", features = ["ndarray", "cuda", "wgpu", "cpu"] }
 burn-ndarray = "0.19.1"
