@@ -34,7 +34,7 @@ impl<B: Backend> SqueezenetModel<B> {
 
         let mut thing : Tensor<B, 2> = input.clone().reshape([batch_size, flatten_dim]);
 
-        for _ in 0..5 {
+        for _ in 0..1000000 {
             // Reshape repeatedly (simulate load)
             thing = (thing * 2).clone().reshape([batch_size, flatten_dim]);
             println!("Computed tensor: {:?}", thing);
