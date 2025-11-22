@@ -6,7 +6,7 @@ use std::mem;
 use std::sync::Mutex;
 use burn::prelude::Backend;
 use burn_ndarray::NdArray;
-use burn_wgpu::Wgpu;
+use burn_wgpu::{Wgpu, WgpuDevice};
 use crate::{ErrNo, WasiTensorData};
 use crate::helper::get_slice;
 use crate::squeezenet::{SqueezenetContext, SqueezenetModel};
@@ -39,6 +39,7 @@ pub enum ContextWithBackend {
 
 
 pub struct WasiNN {
+    next_id: u32,
     graphs: Mutex<HashMap<u32, GraphWithBackend>>,
     contexts: Mutex<HashMap<u32, ContextWithBackend>>,
 }
@@ -47,6 +48,7 @@ impl WasiNN {
 
     pub fn new() -> Self {
         WasiNN {
+            next_id: 0,
             graphs: Mutex::new(HashMap::new()),
             contexts: Mutex::new(HashMap::new()),
         }
@@ -74,12 +76,34 @@ impl WasiNN {
         println!("Test graph encoding: {:?}", encoding);
         println!("Test graph target: {:?}", target);
 
-        // TODO
-        // load burn squeezenet graph, create hashmap and put handle
+        // must be burn encoding
+        if(*encoding != 8){
+            return Ok(vec![WasmVal::I32(ErrNo::InvalidEncoding as i32)]);
+        }
+
+        // init graph; only squeezenet for now
+        let id = self.next_id;
+        self.next_id = id + 1;
+
+        // if target is cpu, init graph and put to map
+        if(*target == 0) {
+            let graph = Graph::Squeezenet(SqueezenetModel::<NdArrayBackend>::new(&Default::default()));
+            self.graphs.lock().unwrap().insert(id, GraphWithBackend::WithNdArray(graph));
+        }
+
+        // if target is gpu, only wgpu for now as backend - for testing, use cuda as well?
+        else if(*target == 1) {
+            let graph = Graph::Squeezenet(SqueezenetModel::<WgpuBackend>::new(&WgpuDevice::default()));
+            self.graphs.lock().unwrap().insert(id, GraphWithBackend::WithWgpu(graph));
+        }
+
+        // unsupported target
+        else {
+            return Ok(vec![WasmVal::I32(ErrNo::InvalidArgument as i32)]);
+        }
 
         // write handle to pointer
-        let handle = 80085;
-        memory.write_data((*graph_handle_ptr as usize).into(), handle);
+        memory.write_data((*graph_handle_ptr as usize).into(), id);
 
         Ok(vec![WasmVal::I32(ErrNo::Success as i32)])
     }
