@@ -1,0 +1,19 @@
+[package]
+name = "wasmedge-custom-plugin"
+version = "0.1.0"
+edition = "2021"
+
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wasmedge_plugin_sdk = { git = "https://github.com/second-state/wasmedge_plugin_rust_sdk.git", features = ["standalone"] }
+burn = { version = "0.19.1", features = ["ndarray", "cuda", "wgpu", "cpu"] }
+burn-ndarray = "0.19.1"
+burn-wgpu = "0.19.1"
+burn-cuda = "0.19.1"
+burn-tch = "0.19.1"
+wgpu = "26.0.1"
+futures = "0.3.31"
+tokio = "1.48.0"
