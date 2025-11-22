@@ -1,4 +1,10 @@
+#[link(wasm_import_module = "hello")]
+extern "C" {
+    fn hello();
+}
 
 fn main() {
-    println!("\n Backend availability (compile-time features + runtime device check):");
+    unsafe {
+        hello();
+    }
 }
