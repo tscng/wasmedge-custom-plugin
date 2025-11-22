@@ -1,3 +1,4 @@
+use burn::backend::{NdArray, Wgpu};
 use burn::prelude::{Backend, DeviceOps};
 use wgpu::{BackendOptions, Backends, Instance, InstanceDescriptor, InstanceFlags, MemoryBudgetThresholds};
 
@@ -14,6 +15,7 @@ fn backend_has_devices<B: Backend>() -> bool {
 
     for type_id in 0..MAX_TYPE_IDS {
         if B::Device::device_count(type_id) > 0 {
+            println!("Device has {} type {}", B::Device::device_count(type_id), type_id);
             return true;
         }
     }
@@ -49,13 +51,13 @@ pub async fn get_backends() {
     // Many examples in the repo use NdArray<f32> as the concrete type.
     println!(
         "  - NdArray (CPU) -> compiled: yes, devices: {}",
-        backend_has_devices::<burn_ndarray::NdArray<f32>>()
+        backend_has_devices::<NdArray<f32>>()
     );
 
     // WGPU / WebGPU backends
     println!(
         "  - WGPU -> compiled: yes, devices: {}",
-        backend_has_devices::<burn_wgpu::Wgpu>()
+        backend_has_devices::<Wgpu>()
     );
 
     // CUDA (NVIDIA GPUs)

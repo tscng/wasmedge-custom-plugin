@@ -4,9 +4,9 @@ use wasmedge_plugin_sdk::memory::Memory;
 use wasmedge_plugin_sdk::types::WasmVal;
 use std::mem;
 use std::sync::Mutex;
+use burn::backend::{NdArray, Wgpu};
+use burn::backend::wgpu::WgpuDevice;
 use burn::prelude::{Backend, DeviceOps};
-use burn_ndarray::NdArray;
-use burn_wgpu::{Wgpu, WgpuDevice};
 use crate::{ErrNo, WasiTensorData};
 use crate::helper::get_slice;
 use crate::squeezenet::{SqueezenetContext, SqueezenetModel};
@@ -253,8 +253,8 @@ impl WasiNN {
                         }
                     }
                 }
-                (ContextWithBackend::WithWgpu(context), graphHandle) => {
-                    if let Some(graph) = self.graphs.lock().unwrap().get(graphHandle) {
+                (ContextWithBackend::WithWgpu(context), graph_handle) => {
+                    if let Some(graph) = self.graphs.lock().unwrap().get(graph_handle) {
                         match (context, graph) {
                             (Context::Squeezenet(squeezenet_context), GraphWithBackend::WithWgpu(Graph::Squeezenet(squeezenet_model))) => {
                                 // get input tensor
