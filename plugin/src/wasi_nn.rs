@@ -4,7 +4,7 @@ use wasmedge_plugin_sdk::memory::Memory;
 use wasmedge_plugin_sdk::types::WasmVal;
 use std::mem;
 use std::sync::Mutex;
-use burn::prelude::Backend;
+use burn::prelude::{Backend, DeviceOps};
 use burn_ndarray::NdArray;
 use burn_wgpu::{Wgpu, WgpuDevice};
 use crate::{ErrNo, WasiTensorData};
@@ -39,9 +39,9 @@ pub enum ContextWithBackend {
 
 
 pub struct WasiNN {
-    next_id: u32,
-    graphs: Mutex<HashMap<u32, GraphWithBackend>>,
-    contexts: Mutex<HashMap<u32, ContextWithBackend>>,
+    next_id: i32,
+    graphs: Mutex<HashMap<i32, GraphWithBackend>>,
+    contexts: Mutex<HashMap<i32, (ContextWithBackend, i32)>>,
 }
 
 impl WasiNN {
@@ -85,15 +85,13 @@ impl WasiNN {
         let id = self.next_id;
         self.next_id = id + 1;
 
-        // if target is cpu, init graph and put to map
-        if(*target == 0) {
-            let graph = Graph::Squeezenet(SqueezenetModel::<NdArrayBackend>::new(&Default::default()));
-            self.graphs.lock().unwrap().insert(id, GraphWithBackend::WithNdArray(graph));
-        }
+        // if target is gpu, only wgpu for now as backend
+        if(*target == 1) {
 
-        // if target is gpu, only wgpu for now as backend - for testing, use cuda as well?
-        else if(*target == 1) {
-            let graph = Graph::Squeezenet(SqueezenetModel::<WgpuBackend>::new(&WgpuDevice::default()));
+            let device = WgpuDevice::IntegratedGpu(1);
+            println!("Selected device: {:?}", device);
+
+            let graph = Graph::Squeezenet(SqueezenetModel::<WgpuBackend>::new(&device));
             self.graphs.lock().unwrap().insert(id, GraphWithBackend::WithWgpu(graph));
         }
 
@@ -104,6 +102,7 @@ impl WasiNN {
 
         // write handle to pointer
         memory.write_data((*graph_handle_ptr as usize).into(), id);
+        println!("Created graph handle: {:?}", id);
 
         Ok(vec![WasmVal::I32(ErrNo::Success as i32)])
     }
@@ -115,21 +114,50 @@ impl WasiNN {
         memory: &'a mut Memory
     ) -> Result<Vec<WasmVal>, CoreError> {
 
-        // TODO
         // check if graph handle exists
-        if(*graph_handle != 80085){
-            Ok(vec![WasmVal::I32(ErrNo::NotFound as i32)])
-        }
-        else {
+        if let Some(handle) = self.graphs.lock().unwrap().get(graph_handle) {
 
-            // TODO
-            // create execution context for graph handle, store in hashmap
-            let ctx_handle = 3055;
+            let id = self.next_id;
+            self.next_id = id + 1;
+
+            // create context handle based on graph type
+            match handle {
+                GraphWithBackend::WithNdArray(graph) => {
+                    match graph {
+                        Graph::Squeezenet(_) => {
+                            let context = SqueezenetContext::<NdArrayBackend>::new();
+                            self.contexts.lock().unwrap().insert(id, (
+                                ContextWithBackend::WithNdArray(Context::Squeezenet(context)), *graph_handle
+                            ));
+                        }
+                        _ => {
+                            return Ok(vec![WasmVal::I32(ErrNo::UnsupportedOperation as i32)]);
+                        }
+                    }
+                }
+                GraphWithBackend::WithWgpu(graph) => {
+                    match graph {
+                        Graph::Squeezenet(_) => {
+                            let context = SqueezenetContext::<WgpuBackend>::new();
+                            self.contexts.lock().unwrap().insert(id, (
+                                ContextWithBackend::WithWgpu(Context::Squeezenet(context)), *graph_handle
+                            ));
+                        }
+                        _ => {
+                            return Ok(vec![WasmVal::I32(ErrNo::UnsupportedOperation as i32)]);
+                        }
+                    }
+                }
+            }
 
             // write handle to pointer
-            memory.write_data((*ctx_handle_ptr as usize).into(), ctx_handle);
+            memory.write_data((*ctx_handle_ptr as usize).into(), id);
+            println!("Created context handle: {:?}", id);
 
             Ok(vec![WasmVal::I32(ErrNo::Success as i32)])
+        }
+        else {
+            Ok(vec![WasmVal::I32(ErrNo::NotFound as i32)])
         }
     }
 
@@ -164,15 +192,36 @@ impl WasiNN {
                             f32
                         );
 
-                // TODO:
-                // get context
-                // reshape input
-                // store input in hashmap index (batch)
+                if let Some(handle) = self.contexts.lock().unwrap().get_mut(ctx_handle) {
 
-                println!("Set input tensor context: {:?}", ctx_handle);
-                println!("Set input tensor index: {:?}", input_index);
-                println!("Set input tensor dimensions: {:?}", dimensions);
-                println!("Set input tensor first 10 values: {:?}", &tensor[0..10]);
+                    match handle {
+                        (ContextWithBackend::WithNdArray(context), _) => {
+                            match context {
+                                Context::Squeezenet(squeezenet_context) => {
+                                    squeezenet_context.set_input(*input_index as u32, &tensor, dimensions);
+                                }
+                                _ => {
+                                    return Ok(vec![WasmVal::I32(ErrNo::UnsupportedOperation as i32)]);
+                                }
+                            }
+                        }
+                        (ContextWithBackend::WithWgpu(context), _) => {
+                            match context {
+                                Context::Squeezenet(squeezenet_context) => {
+                                    squeezenet_context.set_input(*input_index as u32, &tensor, dimensions);
+                                }
+                                _ => {
+                                    return Ok(vec![WasmVal::I32(ErrNo::UnsupportedOperation as i32)]);
+                                }
+                            }
+                        }
+                    }
+                }
+                else {
+                    return Ok(vec![WasmVal::I32(ErrNo::NotFound as i32)]);
+                }
+
+                println!("Set input tensor context: {:?}[{:?}] : {:?} -> {:?} ...", ctx_handle, input_index, dimensions, &tensor[0..10]);
 
                 Ok(vec![WasmVal::I32(ErrNo::Success as i32)])
             }
@@ -185,14 +234,49 @@ impl WasiNN {
         ctx_handle: &i32
     ) -> Result<Vec<WasmVal>, CoreError> {
 
-        // TODO
-        // get context from hashmap
-        // get graph from context
-        // get context inputs
-        // compute graph with inputs
-        // store outputs in context
+        if let Some(handle) = self.contexts.lock().unwrap().get_mut(ctx_handle) {
+            match handle {
+                (ContextWithBackend::WithNdArray(context), graphHandle) => {
+                    if let Some(graph) = self.graphs.lock().unwrap().get(graphHandle) {
+                        match (context, graph) {
+                            (Context::Squeezenet(squeezenet_context), GraphWithBackend::WithNdArray(Graph::Squeezenet(squeezenet_model))) => {
+                                // get input tensor
+                                let input_tensor = squeezenet_context.inputs.get(&0).unwrap();
+                                // compute
+                                let output_tensor = squeezenet_model.compute(input_tensor.clone());
+                                // store output
+                                squeezenet_context.outputs.push(output_tensor);
+                            }
+                            _ => {
+                                return Ok(vec![WasmVal::I32(ErrNo::UnsupportedOperation as i32)]);
+                            }
+                        }
+                    }
+                }
+                (ContextWithBackend::WithWgpu(context), graphHandle) => {
+                    if let Some(graph) = self.graphs.lock().unwrap().get(graphHandle) {
+                        match (context, graph) {
+                            (Context::Squeezenet(squeezenet_context), GraphWithBackend::WithWgpu(Graph::Squeezenet(squeezenet_model))) => {
+                                // get input tensor
+                                let input_tensor = squeezenet_context.inputs.get(&1).unwrap();
+                                // compute
+                                let output_tensor = squeezenet_model.compute(input_tensor.clone());
+                                // store output
+                                println!("Computed output tensor: {:?}", output_tensor);
+                                squeezenet_context.outputs.push(output_tensor);
+                            }
+                            _ => {
+                                return Ok(vec![WasmVal::I32(ErrNo::UnsupportedOperation as i32)]);
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            return Ok(vec![WasmVal::I32(ErrNo::NotFound as i32)]);
+        }
 
-        println!("Computing context: {:?}", ctx_handle);
+        println!("Computed context: {:?}", ctx_handle);
 
         Ok(vec![WasmVal::I32(ErrNo::Success as i32)])
     }

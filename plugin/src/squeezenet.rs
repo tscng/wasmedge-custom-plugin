@@ -1,42 +1,63 @@
 use std::collections::HashMap;
-use burn::prelude::Backend;
+use std::marker::PhantomData;
+use burn::prelude::{Backend, DeviceOps};
 use burn::Tensor;
-use squeezenet_burn::model::{squeezenet1::Model};
+use burn_wgpu::{Wgpu, WgpuDevice};
+//use squeezenet_burn::model::{squeezenet1::Model};
 
 const INPUT_DIM: usize = 4;
 const OUTPUT_DIM: usize = 2;
 
 pub struct SqueezenetModel<B: Backend> {
-    model: Model<B>
+    model: i32 ,//Model<B>
+    _marker: PhantomData<B>,
 }
 
 pub struct SqueezenetContext<B: Backend> {
-    inputs: HashMap<u32, Tensor<B, 4>>,
-    outputs: Vec<Tensor<B, OUTPUT_DIM>>,
-    graph: SqueezenetModel<B>
+    pub inputs: HashMap<u32, Tensor<B, INPUT_DIM>>,
+    pub outputs: Vec<Tensor<B, OUTPUT_DIM>>
 }
 
 impl<B: Backend> SqueezenetModel<B> {
     pub fn new(device: &B::Device) -> Self {
-        let model = Model::new(device);
-        SqueezenetModel { model }
+        let model = 0; //Model::new(device);
+        SqueezenetModel::<B> { model, _marker: Default::default() }
     }
 
     pub fn compute(&self, input: Tensor<B, INPUT_DIM>) -> Tensor<B, OUTPUT_DIM> {
-        self.model.forward(input)
+        //self.model.forward(input)
+
+        let shape = input.dims(); // e.g. [B, C, H, W]
+        let batch_size = shape[0];
+        let flatten_dim = shape[1] * shape[2] * shape[3];
+
+        let mut thing : Tensor<B, 2> = input.clone().reshape([batch_size, flatten_dim]);
+
+        for _ in 0..10 {
+            // Reshape repeatedly (simulate load)
+            thing = (thing * 2).clone().reshape([batch_size, flatten_dim]);
+            println!("Computed tensor: {:?}", thing);
+        }
+        thing
     }
 }
 
 impl<B: Backend> SqueezenetContext<B> {
-    pub fn new(graph: SqueezenetModel<B>) -> Self {
+    pub fn new() -> Self {
         SqueezenetContext {
             inputs: HashMap::new(),
-            outputs: Vec::new(),
-            graph
+            outputs: Vec::new()
         }
     }
     pub fn set_input(&mut self, key: u32, input: &[B::FloatElem], dimens: [usize; INPUT_DIM]) {
-        let device = Default::default();
+        let device: B::Device = Default::default();
+        println!("B is: {}", std::any::type_name::<B>());
+        println!("Selected device: {:?}", device.to_id());
+
+        let device2: WgpuDevice = WgpuDevice::IntegratedGpu(1);
+        let tensor = Tensor::<Wgpu, 1>::from_data(&*input, &device2).reshape(dimens);
+        println!("Selected device: {:?}", device2.to_id());
+
         let tensor = Tensor::<B, 1>::from_data(&*input, &device).reshape(dimens);
         self.inputs.insert(key, tensor);
     }

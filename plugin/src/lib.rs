@@ -16,8 +16,8 @@ use wasmedge_plugin_sdk::{
 };
 use wasmedge_plugin_sdk::module::PluginModule;
 use wasmedge_plugin_sdk::types::ValType;
-
 use wasmedge_wasi_nn::TensorType;
+
 use crate::backends::get_backends;
 use crate::wasi_nn::WasiNN;
 

@@ -5,7 +5,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("WASI-NN test app");
 
     let model_bytes: Vec<u8> = vec![1,2,3];
-    let input = vec![0f32; 224 * 224 * 3];
+    let input = vec![2f32; 224 * 224 * 3];
     let input_dim = vec![1, 224, 224, 3];
     let mut output_buffer = vec![0f32; 1001];
 
@@ -21,7 +21,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ctx.compute()?;
 
     // Copy output to abuffer.
-    let output_bytes = ctx.get_output(0, &mut output_buffer)?;
+    let output_bytes = ctx.get_output(1, &mut output_buffer)?;
     println!("output_bytes: {:?}", output_bytes);
     assert_eq!(output_bytes, output_buffer.len() * std::mem::size_of::<f32>());
 
