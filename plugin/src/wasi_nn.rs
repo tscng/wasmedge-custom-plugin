@@ -8,6 +8,7 @@ use burn::backend::{NdArray, Wgpu};
 use burn::backend::ndarray::NdArrayDevice;
 use burn::backend::wgpu::WgpuDevice;
 use burn::prelude::{Backend, DeviceOps};
+use wasmedge_wasi_nn::TensorType;
 use crate::{ErrNo, WasiTensorData};
 use crate::helper::get_slice;
 use crate::squeezenet::{SqueezenetContext, SqueezenetModel};
@@ -187,14 +188,18 @@ impl WasiNN {
                             INPUT_DIM * mem::size_of::<u32>(),
                             u32
                         );
-                let dimensions: [usize; INPUT_DIM] = raw_dimensions
+                let dimensions: [usize; 4] = raw_dimensions
                     .iter()
                     .map(|&x| x as usize)
                     .collect::<Vec<usize>>()
                     .try_into()
                     .unwrap();
 
-                // FIXME: The type of f32 should be decided at runtime based on input_tensor.tensor_type.
+
+                if(input_tensor.tensor_type != TensorType::F32) {
+                    return Ok(vec![WasmVal::I32(ErrNo::UnsupportedOperation as i32)]);
+                }
+
                 let tensor = get_slice!(
                             memory,
                             input_tensor.tensor_ptr,
@@ -208,7 +213,10 @@ impl WasiNN {
                         (ContextWithBackend::WithNdArray(context), _) => {
                             match context {
                                 Context::Squeezenet(squeezenet_context) => {
-                                    squeezenet_context.set_input(*input_index as u32, &tensor, dimensions);
+                                    if(*input_index != 0) {
+                                        return Ok(vec![WasmVal::I32(ErrNo::UnsupportedOperation as i32)]);
+                                    }
+                                    squeezenet_context.set_input(&tensor, dimensions);
                                 }
                                 _ => {
                                     return Ok(vec![WasmVal::I32(ErrNo::UnsupportedOperation as i32)]);
@@ -218,7 +226,10 @@ impl WasiNN {
                         (ContextWithBackend::WithWgpu(context), _) => {
                             match context {
                                 Context::Squeezenet(squeezenet_context) => {
-                                    squeezenet_context.set_input(*input_index as u32, &tensor, dimensions);
+                                    if(*input_index != 0) {
+                                        return Ok(vec![WasmVal::I32(ErrNo::UnsupportedOperation as i32)]);
+                                    }
+                                    squeezenet_context.set_input(&tensor, dimensions);
                                 }
                                 _ => {
                                     return Ok(vec![WasmVal::I32(ErrNo::UnsupportedOperation as i32)]);
@@ -250,12 +261,8 @@ impl WasiNN {
                     if let Some(graph) = self.graphs.lock().unwrap().get(graphHandle) {
                         match (context, graph) {
                             (Context::Squeezenet(squeezenet_context), GraphWithBackend::WithNdArray(Graph::Squeezenet(squeezenet_model))) => {
-                                // get input tensor
-                                let input_tensor = squeezenet_context.inputs.get(&1).unwrap();
-                                // compute
-                                let output_tensor = squeezenet_model.compute(input_tensor.clone());
-                                // store output
-                                squeezenet_context.outputs.push(output_tensor);
+                                let input_tensor = squeezenet_context.input.clone().unwrap();
+                                squeezenet_context.output = squeezenet_model.compute(input_tensor).into();
                             }
                             _ => {
                                 return Ok(vec![WasmVal::I32(ErrNo::UnsupportedOperation as i32)]);
@@ -267,13 +274,8 @@ impl WasiNN {
                     if let Some(graph) = self.graphs.lock().unwrap().get(graph_handle) {
                         match (context, graph) {
                             (Context::Squeezenet(squeezenet_context), GraphWithBackend::WithWgpu(Graph::Squeezenet(squeezenet_model))) => {
-                                // get input tensor
-                                let input_tensor = squeezenet_context.inputs.get(&1).unwrap();
-                                // compute
-                                let output_tensor = squeezenet_model.compute(input_tensor.clone());
-                                // store output
-                                println!("Computed output tensor: {:?}", output_tensor);
-                                squeezenet_context.outputs.push(output_tensor);
+                                let input_tensor = squeezenet_context.input.clone().unwrap();
+                                squeezenet_context.output = squeezenet_model.compute(input_tensor).into();
                             }
                             _ => {
                                 return Ok(vec![WasmVal::I32(ErrNo::UnsupportedOperation as i32)]);
@@ -308,9 +310,51 @@ impl WasiNN {
         // write output to output_ptr
         // check written length
 
+        let raw_output: Vec<f32>;
+        if let Some(handle) = self.contexts.lock().unwrap().get_mut(ctx_handle) {
 
-        let written_length = 69;
-        memory.write_data((*output_written_len_ptr as usize).into(), written_length);
+             match handle {
+                (ContextWithBackend::WithNdArray(context), _) => {
+                    match context {
+                        Context::Squeezenet(squeezenet_context) => {
+                            if(*output_index != 0) {
+                                return Ok(vec![WasmVal::I32(ErrNo::UnsupportedOperation as i32)]);
+                            }
+                            raw_output = squeezenet_context.get_output();
+
+                        }
+                        _ => {
+                            return Ok(vec![WasmVal::I32(ErrNo::UnsupportedOperation as i32)]);
+                        }
+                    }
+                }
+                (ContextWithBackend::WithWgpu(context), _) => {
+                    match context {
+                        Context::Squeezenet(squeezenet_context) => {
+                            if(*output_index != 0) {
+                                return Ok(vec![WasmVal::I32(ErrNo::UnsupportedOperation as i32)]);
+                            }
+                            raw_output = squeezenet_context.get_output();
+                        }
+                        _ => {
+                            return Ok(vec![WasmVal::I32(ErrNo::UnsupportedOperation as i32)]);
+                        }
+                    }
+                }
+            }
+        }
+        else {
+            return Ok(vec![WasmVal::I32(ErrNo::NotFound as i32)]);
+        }
+
+        let output: &[u8] = bytemuck::cast_slice(&raw_output);
+        if output.len() > *output_max_size as usize {
+            println!("Was output too large: {} > {}", output.len(), *output_max_size as usize);
+            return Ok(vec![WasmVal::I32(ErrNo::TooLarge as i32)]);
+        }
+
+        memory.write_bytes(output, *output_ptr as u32).unwrap();
+        memory.write_data((*output_written_len_ptr as usize).into(), output.len());
 
         Ok(vec![WasmVal::I32(ErrNo::Success as i32)])
     }
