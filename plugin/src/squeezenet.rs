@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 use burn::prelude::{Backend, DeviceOps};
 use burn::Tensor;
+use log::{debug, info};
 use squeezenet_burn::model::squeezenet1::Model;
 
 const INPUT_DIM: usize = 4;
@@ -51,8 +52,8 @@ impl<B: Backend> SqueezenetContext<B> {
     }
     pub fn set_input(&mut self, input: &[B::FloatElem], dimens: [usize; INPUT_DIM]) {
         let device: B::Device = Default::default();
-        println!("B is: {}", std::any::type_name::<B>());
-        println!("Selected device: {:?}", device.to_id());
+        debug!("B is: {}", std::any::type_name::<B>());
+        debug!("Selected device: {:?}", device.to_id());
 
         let tensor = Tensor::<B, 1>::from_data(&*input, &device).reshape(dimens);
         self.input = Some(tensor);

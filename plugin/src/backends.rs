@@ -1,5 +1,6 @@
 use burn::backend::{NdArray, Wgpu};
 use burn::prelude::{Backend, DeviceOps};
+use log::info;
 use wgpu::{BackendOptions, Backends, Instance, InstanceDescriptor, InstanceFlags, MemoryBudgetThresholds};
 
 /// Generic helper that checks whether a backend exposes any devices.
@@ -15,7 +16,6 @@ fn backend_has_devices<B: Backend>() -> bool {
 
     for type_id in 0..MAX_TYPE_IDS {
         if B::Device::device_count(type_id) > 0 {
-            println!("Device has {} type {}", B::Device::device_count(type_id), type_id);
             return true;
         }
     }
@@ -25,7 +25,7 @@ fn backend_has_devices<B: Backend>() -> bool {
 
 pub async fn get_backends() {
 
-    println!("WebGPU state:");
+    info!("=== WebGPU state:");
 
     let instance = Instance::new(&InstanceDescriptor {
         backends: Backends::all(),
@@ -40,22 +40,22 @@ pub async fn get_backends() {
         .expect("Failed to find an appropriate adapter");
 
     let info = adapter.get_info();
-    println!("GPU Name: {}", info.name);
-    println!("Vendor ID: {:x}", info.vendor);
-    println!("Device ID: {:x}", info.device);
-    println!("Backend: {:?}", info.backend);
+    info!("GPU Name: {}", info.name);
+    info!("Vendor ID: {:x}", info.vendor);
+    info!("Device ID: {:x}", info.device);
+    info!("Backend: {:?}", info.backend);
 
-    println!("\n Backend availability (compile-time features + runtime device check):");
+    info!("=== Backend availability (compile-time features + runtime device check):");
 
     // CPU backend (always available if compiled)
     // Many examples in the repo use NdArray<f32> as the concrete type.
-    println!(
+    info!(
         "  - NdArray (CPU) -> compiled: yes, devices: {}",
         backend_has_devices::<NdArray<f32>>()
     );
 
     // WGPU / WebGPU backends
-    println!(
+    info!(
         "  - WGPU -> compiled: yes, devices: {}",
         backend_has_devices::<Wgpu>()
     );
@@ -66,5 +66,5 @@ pub async fn get_backends() {
     //    backend_has_devices::<burn_cuda::Cuda<f32, i32>>()
     //);
 
-    println!("\n=====\n");
+    info!("=== ");
 }

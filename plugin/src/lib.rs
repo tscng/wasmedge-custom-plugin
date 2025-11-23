@@ -18,7 +18,6 @@ use wasmedge_plugin_sdk::{
 use wasmedge_plugin_sdk::module::PluginModule;
 use wasmedge_plugin_sdk::types::ValType;
 use wasmedge_wasi_nn::TensorType;
-
 use crate::backends::get_backends;
 use crate::wasi_nn::WasiNN;
 
@@ -45,9 +44,16 @@ struct WasiTensorData {
 }
 
 pub fn create_module() -> PluginModule<()> {
+    simple_logger::SimpleLogger::new()
+        .with_level(log::LevelFilter::Error)
+        .with_module_level("wasmedge_custom_plugin", log::LevelFilter::Debug)
+        .init()
+        .expect("Failed to initialize logger");
 
     // debug backends
     futures::executor::block_on(get_backends());
+
+    log::info!("=== Initializing wasmedge-plugin");
 
     pub static WASI_NN: Lazy<Mutex<WasiNN>> = Lazy::new(|| {
         Mutex::new(WasiNN::new())

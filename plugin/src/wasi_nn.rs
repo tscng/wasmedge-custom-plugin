@@ -13,6 +13,7 @@ use crate::{ErrNo, WasiTensorData};
 use crate::helper::get_slice;
 use crate::squeezenet::{SqueezenetContext, SqueezenetModel};
 use crate::whisper::{WhisperContext, WhisperModel};
+use log::{info, debug, error};
 
 const INPUT_DIM: usize = 4;
 
@@ -65,6 +66,7 @@ impl WasiNN {
         graph_handle_ptr: &i32,
         memory: &'a mut Memory
     ) -> Result<Vec<WasmVal>, CoreError> {
+        info!("WASI-NN Load called with encoding: {}, target: {}", encoding, target);
 
         let bytes = memory
             .data_pointer(*data_ptr as usize, *data_len as usize)
@@ -72,11 +74,7 @@ impl WasiNN {
 
         // print for debugging
         let name = String::from_utf8_lossy(&bytes);
-        println!("Test bytes: {}", name);
-        println!("Test graph data_ptr: {:?}", *data_ptr);
-        println!("Test graph data_len: {:?}", *data_len);
-        println!("Test graph encoding: {:?}", *encoding);
-        println!("Test graph target: {:?}", *target);
+        debug!("Test bytes: {}", name);
 
         // must be burn encoding
         if(*encoding != 8){
@@ -92,7 +90,7 @@ impl WasiNN {
             let device = WgpuDevice::DefaultDevice;
 
             // 0:discrete, 1:integrated, 2:virtual, 3:cpu, 4:default
-            println!("Selected device: {:?}, {:?}", device, device.to_id());
+            info!("Selected device: {:?}, {:?}", device, device.to_id());
 
             let graph = Graph::Squeezenet(SqueezenetModel::<WgpuBackend>::new(&device));
             self.graphs.lock().unwrap().insert(id, GraphWithBackend::WithWgpu(graph));
@@ -100,7 +98,7 @@ impl WasiNN {
 
         else if(*target == 0) {
             let device = NdArrayDevice::default();
-            println!("Selected device: {:?}, {:?}", device, device.to_id());
+            info!("Selected device: {:?}, {:?}", device, device.to_id());
 
             let graph = Graph::Squeezenet(SqueezenetModel::<NdArrayBackend>::new(&device));
             self.graphs.lock().unwrap().insert(id, GraphWithBackend::WithNdArray(graph));
@@ -113,7 +111,7 @@ impl WasiNN {
 
         // write handle to pointer
         memory.write_data((*graph_handle_ptr as usize).into(), id);
-        println!("Created graph handle: {:?}", id);
+        info!("Created graph handle: {:?}", id);
 
         Ok(vec![WasmVal::I32(ErrNo::Success as i32)])
     }
@@ -163,7 +161,7 @@ impl WasiNN {
 
             // write handle to pointer
             memory.write_data((*ctx_handle_ptr as usize).into(), id);
-            println!("Created context handle: {:?}", id);
+            info!("Created context handle: {:?}", id);
 
             Ok(vec![WasmVal::I32(ErrNo::Success as i32)])
         }
@@ -242,7 +240,7 @@ impl WasiNN {
                     return Ok(vec![WasmVal::I32(ErrNo::NotFound as i32)]);
                 }
 
-                println!("Set input tensor context: {:?}[{:?}] : {:?} -> {:?} ...", ctx_handle, input_index, dimensions, &tensor[0..10]);
+                debug!("Set input tensor context: {:?}[{:?}] : {:?} -> {:?} ...", ctx_handle, input_index, dimensions, &tensor[0..10]);
 
                 Ok(vec![WasmVal::I32(ErrNo::Success as i32)])
             }
@@ -288,7 +286,7 @@ impl WasiNN {
             return Ok(vec![WasmVal::I32(ErrNo::NotFound as i32)]);
         }
 
-        println!("Computed context: {:?}", ctx_handle);
+        info!("Computed context: {:?}", ctx_handle);
 
         Ok(vec![WasmVal::I32(ErrNo::Success as i32)])
     }
@@ -302,13 +300,6 @@ impl WasiNN {
         output_written_len_ptr: &i32,
         memory: &'a mut Memory
     ) -> Result<Vec<WasmVal>, CoreError> {
-
-        // TODO
-        // get context from hashmap
-        // get output at index from context
-        // check length
-        // write output to output_ptr
-        // check written length
 
         let raw_output: Vec<f32>;
         if let Some(handle) = self.contexts.lock().unwrap().get_mut(ctx_handle) {
@@ -349,7 +340,7 @@ impl WasiNN {
 
         let output: &[u8] = bytemuck::cast_slice(&raw_output);
         if output.len() > *output_max_size as usize {
-            println!("Was output too large: {} > {}", output.len(), *output_max_size as usize);
+            error!("Was output too large: {} > {}", output.len(), *output_max_size as usize);
             return Ok(vec![WasmVal::I32(ErrNo::TooLarge as i32)]);
         }
 
